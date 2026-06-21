@@ -28,6 +28,7 @@ from jrtt.cli_cmds import dump as cmd_dump
 from jrtt.cli_cmds import status as cmd_status
 from jrtt.cli_cmds import ping as cmd_ping
 from jrtt.cli_cmds import stop as cmd_stop
+from jrtt.cli_cmds import skill as cmd_skill
 from jrtt.daemon.daemon import run_daemon
 
 
@@ -94,6 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="Show daemon/JLink/RTT state")
     sub.add_parser("ping", help="Health probe")
     sub.add_parser("stop", help="Shut down daemon")
+    cmd_skill.build_skill_parser(sub)
 
     return p
 
@@ -112,7 +114,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             speed_khz=args.speed,
         )
 
-    # CLI role: ensure daemon exists, then dispatch
+    # CLI role: ensure daemon exists, then dispatch.
+    # The `skill` subcommand is purely local (copies files) and must NOT
+    # auto-spawn a daemon.
+    if args.cmd == "skill":
+        return cmd_skill.run(args)
+
     from jrtt.spawn import ensure_daemon
 
     if not ensure_daemon(pipe_name=args.pipe, chip=args.chip):

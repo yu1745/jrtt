@@ -12,7 +12,40 @@ jrtt dump --last 10               # snapshot recent lines
 jrtt status                       # show daemon/JLink state
 jrtt ping                         # health probe
 jrtt stop                         # shutdown daemon
+jrtt skill install                # install SKILL.md to Claude Code / Codex
 ```
+
+## This repo is also a skill repo
+
+The `SKILL.md` at the repo root is a real Agent skill — it has the
+`name`/`description` frontmatter, lives in the conventional layout, and
+describes how an agent should use jrtt. You can:
+
+1. **Use it in place.** Open this folder as the agent's working dir — the
+   `SKILL.md` is discovered.
+2. **Install it.** `jrtt skill install` copies `SKILL.md` (and `LICENSE`) to
+   the agent's known skills directories:
+
+   ```
+   $ jrtt skill install --list
+   Known skill install targets:
+     claude-user       Claude Code (user)        ~/.claude/skills/jrtt/SKILL.md
+     claude-project    Claude Code (project)     <cwd>/.claude/skills/jrtt/SKILL.md
+     codex-user        Codex CLI (user)          ~/.codex/skills/jrtt/SKILL.md
+
+   $ jrtt skill install
+   jrtt skill: installing 'jrtt' from <repo>
+     [claude-user]    installed: ~/.claude/skills/jrtt
+     [claude-project] installed: ./.claude/skills/jrtt
+     [codex-user]     installed: ~/.codex/skills/jrtt
+   ```
+
+   Flags: `--target {claude-user,claude-project,codex-user}` (repeatable),
+   `--name NAME` (default `jrtt`), `--overwrite`, `--dry-run`.
+   `jrtt skill uninstall` reverses it.
+
+The repo is therefore **both** a Python package (the daemon + CLI) **and**
+a skill repo (the `SKILL.md`). The `skill` subcommand is the bridge.
 
 ## Quick start
 

@@ -26,6 +26,15 @@ jrtt = "jrtt.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Make the repo itself a "skill repo" — the SKILL.md and LICENSE at the repo
+# root get shipped with the wheel so `jrtt skill install` works after
+# `pip install jrtt`, not just from a source checkout.
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = ["SKILL.md", "LICENSE", "*.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
