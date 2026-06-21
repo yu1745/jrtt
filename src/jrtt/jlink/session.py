@@ -44,6 +44,19 @@ class JLinkSession:
         from pylink import JLink, Library  # type: ignore
         self._pylink_JLink = JLink
         self._pylink_Library = Library
+        # Default to the well-known SEGGER install paths; auto-detect does
+        # NOT work with pylink 2.x on Windows (Library() with no path raises
+        # "Expected to be given a valid DLL" — see verified-facts in spec §0).
+        if dll_path is None:
+            from pathlib import Path
+            for p in [
+                Path.home() / ".eide" / "tools" / "jlink" / "JLink_x64.dll",
+                Path("C:/Program Files/SEGGER/JLink/JLink_x64.dll"),
+                Path("C:/Program Files (x86)/SEGGER/JLink/JLink_x64.dll"),
+            ]:
+                if p.is_file():
+                    dll_path = str(p)
+                    break
         self._dll_path = dll_path
 
     def open(

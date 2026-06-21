@@ -71,8 +71,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = p.add_subparsers(dest="cmd", required=False)
 
-    sub.add_parser("tail", help="Stream RTT lines (GNU tail-compatible)").add_argument_group("tail")
-    sub.add_parser("dump", help="Snapshot ring buffer")
+    tail_p = sub.add_parser("tail", help="Stream RTT lines (GNU tail-compatible)")
+    tail_p.add_argument("-n", "--lines", type=int, default=0,
+                        help="Replay last N lines on connect (0 = live only)")
+    tail_p.add_argument("-f", "--follow", action="store_true", default=True)
+    tail_p.add_argument("-c", "--channel", type=int, default=0, help="RTT up-buffer index (default: 0)")
+    tail_p.add_argument("--regex", type=str, default=None, help="Filter lines matching regex (Python bytes pattern)")
+    tail_p.add_argument("--since", type=str, default=None, help="Only show lines newer than DUR (e.g. 10s, 2m)")
+    tail_p.add_argument("--max-lines", type=int, default=None, help="Exit after N lines")
+    tail_p.add_argument("--json", action="store_true", help="NDJSON output for agent consumption")
+
+    dump_p = sub.add_parser("dump", help="Snapshot ring buffer")
+    dump_p.add_argument("--last", type=int, default=None, help="Last N lines")
+    dump_p.add_argument("--since", type=str, default=None, help="Last DURATION (e.g. 30s)")
+    dump_p.add_argument("-c", "--channel", type=int, default=None, help="RTT channel filter")
+    dump_p.add_argument("--json", action="store_true", help="NDJSON output")
+
     sub.add_parser("status", help="Show daemon/JLink/RTT state")
     sub.add_parser("ping", help="Health probe")
     sub.add_parser("stop", help="Shut down daemon")

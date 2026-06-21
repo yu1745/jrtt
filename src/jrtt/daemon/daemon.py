@@ -184,7 +184,7 @@ def run_daemon(*, pipe_name: str, dll_path: str | None, chip: str, tif: str, spe
                             with st.condition:
                                 st.pending_events.append(evt)
                                 st.condition.notify_all()
-            time.sleep(0.01)
+                time.sleep(0.01)
 
     # 4. Pipe server accept loop (each client handled inline)
     server = PipeServer(pipe_name)
@@ -197,6 +197,7 @@ def run_daemon(*, pipe_name: str, dll_path: str | None, chip: str, tif: str, spe
                     server, registry, client_states, states_lock, shutdown_evt,
                     ring=ring, started_at=started_at,
                 )
+                print("[SRV-LOOP] _handle_one_client returned", flush=True)
             except PipeError:
                 return
             except Exception as e:
@@ -237,33 +238,55 @@ def _handle_one_client(
     ring: RingBuffer,
     started_at: float,
 ) -> None:
-    """Service one connected client through a complete session."""
+    """Accept one connection and service it end-to-end (one op or tail)."""
     parser = FrameParser()
-    req = _pipe_read_request(server, parser)
-    if req is None:
-        return
 
-    # One-shot ops
-    if req.op == "ping":
-        _pipe_send(server, Res(id=req.id, ok=True, data={"version": __version__}))
-        return
-    if req.op == "status":
-        _pipe_send(server, Res(id=req.id, ok=True, data=_build_status(registry, ring, started_at)))
-        return
-    if req.op == "dump":
-        _pipe_send(server, Res(id=req.id, ok=True, data=_do_dump(ring, req.args)))
-        return
-    if req.op == "shutdown":
-        _pipe_send(server, Res(id=req.id, ok=True, data={}))
-        shutdown_evt.set()
-        return
+    def handler(srv: PipeServer) -> None:
+        # Read first request
+        buf = bytearray()
+        while not buf.endswith(b"\n"):
+            chunk = srv.read_chunk()
+            if not chunk:
+                return  # client disconnected before sending anything
+            buf.extend(chunk)
+        try:
+            frames = parser.feed(bytes(buf))
+        except ProtocolError as e:
+            srv.send(encode_frame(Res(id="?", ok=False, code="E_PROTOCOL", msg=str(e))))
+            return
+        if not frames:
+            return
+        req = frames[0]
+        if not isinstance(req, Req):
+            srv.send(encode_frame(Res(id="?", ok=False, code="E_PROTOCOL",
+                                      msg=f"expected req, got {type(req).__name__}")))
+            return
 
-    # Streaming op: tail
-    if req.op == "tail":
-        _serve_tail(server, registry, client_states, states_lock, req)
-        return
+        # Dispatch
+        if req.op == "ping":
+            srv.send(encode_frame(Res(id=req.id, ok=True, data={"version": __version__})))
+            return
+        if req.op == "status":
+            srv.send(encode_frame(Res(id=req.id, ok=True,
+                                      data=_build_status(registry, ring, started_at))))
+            return
+        if req.op == "dump":
+            srv.send(encode_frame(Res(id=req.id, ok=True, data=_do_dump(ring, req.args))))
+            return
+        if req.op == "shutdown":
+            srv.send(encode_frame(Res(id=req.id, ok=True, data={})))
+            shutdown_evt.set()
+            return
+        if req.op == "tail":
+            # Streaming: ack + stream events until client disconnect.
+            if not srv.send(encode_frame(Res(id=req.id, ok=True, data={"subscribed": True}))):
+                return
+            _serve_tail(srv, registry, client_states, states_lock, req, ring=ring, shutdown_evt=shutdown_evt)
+            return
+        srv.send(encode_frame(Res(id=req.id, ok=False, code="E_UNKNOWN_OP",
+                                  msg=f"unknown op: {req.op}")))
 
-    _pipe_send(server, Res(id=req.id, ok=False, code="E_UNKNOWN_OP", msg=f"unknown op: {req.op}"))
+    server.serve_one(handler, timeout_s=60.0)
 
 
 def _serve_tail(
@@ -272,6 +295,9 @@ def _serve_tail(
     client_states: dict,
     states_lock: threading.Lock,
     req: Req,
+    *,
+    ring: RingBuffer,
+    shutdown_evt: threading.Event,
 ) -> None:
     """Register subscriber, ack client, then stream events until disconnect."""
     args = req.args or {}
@@ -284,9 +310,12 @@ def _serve_tail(
     compiled_re: re.Pattern | None = None
     if regex_pat:
         try:
-            compiled_re = re.compile(regex_pat.encode("utf-8").decode("unicode_escape").encode("latin-1").decode("utf-8", errors="replace") if isinstance(regex_pat, str) else regex_pat)
+            if isinstance(regex_pat, str):
+                compiled_re = re.compile(regex_pat.encode("utf-8"))
+            else:
+                compiled_re = re.compile(regex_pat)
         except re.error as e:
-            _pipe_send(server, Res(id=req.id, ok=False, code="E_BAD_REGEX", msg=str(e)))
+            server.send(encode_frame(Res(id=req.id, ok=False, code="E_BAD_REGEX", msg=str(e))))
             return
 
     sub = Subscriber(
@@ -300,21 +329,12 @@ def _serve_tail(
     with states_lock:
         client_states[req.id] = state
     if since_seconds:
-        # Advance sub cursor past anything older than (now - since_seconds)
         cutoff = time.time() - since_seconds
         sub.last_index = sum(1 for e in ring.snapshot() if e.ts < cutoff)
-
-    # Send ack Res so the client knows subscription is live
-    if not _pipe_send(server, Res(id=req.id, ok=True, data={"subscribed": True})):
-        registry.remove(req.id)
-        with states_lock:
-            client_states.pop(req.id, None)
-        return
 
     emitted = 0
     try:
         while True:
-            # Wait for pending events
             with state.condition:
                 while not state.pending_events and not shutdown_evt.is_set():
                     state.condition.wait(timeout=0.5)
@@ -323,7 +343,7 @@ def _serve_tail(
                         return
                     continue
                 evt = state.pending_events.pop(0)
-            if not _pipe_send(server, evt):
+            if not server.send(encode_frame(evt)):
                 return
             emitted += 1
             if max_lines is not None and emitted >= int(max_lines):

@@ -22,6 +22,7 @@ from __future__ import annotations
 import ctypes
 import sys
 import threading
+import time
 from ctypes import wintypes
 
 if sys.platform != "win32":
@@ -174,20 +175,35 @@ class PipeClient:
         self._handle: wintypes.HANDLE | None = None
 
     def __enter__(self) -> "PipeClient":
-        # Wait for the pipe to appear, then open it
-        if not kernel32.WaitNamedPipeW(self._name, self._timeout_ms):
-            raise PipeError(f"Pipe not available: {self._name}")
-        h = kernel32.CreateFileW(
-            self._name,
-            GENERIC_READ | GENERIC_WRITE,
-            0,  # no sharing — exclusive client access
-            None,
-            OPEN_EXISTING,
-            0,
-            None,
-        )
-        if h == INVALID_HANDLE_VALUE or h is None:
+        # Skip WaitNamedPipeW; it can block indefinitely on some systems
+        # when the pipe exists but is busy in a connection. Just try
+        # CreateFileW directly with a short retry loop.
+        deadline = time.monotonic() + self._timeout_ms / 1000.0
+        h = None
+        err = 0
+        while time.monotonic() < deadline:
+            h = kernel32.CreateFileW(
+                self._name,
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                None,
+                OPEN_EXISTING,
+                0,
+                None,
+            )
+            if h and h != INVALID_HANDLE_VALUE:
+                break
             err = ctypes.get_last_error()
+            if err == ERROR_FILE_NOT_FOUND:
+                time.sleep(0.05)
+                continue
+            if err == ERROR_PIPE_BUSY:
+                time.sleep(0.05)
+                continue
+            break
+        else:
+            raise PipeError(f"Could not open {self._name} within {self._timeout_ms}ms (err={err})")
+        if not h or h == INVALID_HANDLE_VALUE:
             if err == ERROR_FILE_NOT_FOUND:
                 raise PipeError(f"No server listening on {self._name}")
             raise PipeError(f"CreateFileW failed: Win32 error {err}")
@@ -295,50 +311,69 @@ class PipeServer:
             kernel32.CancelIoEx(self._handle, None)
 
     def serve_one(self, handler, *, timeout_s: float = 30.0) -> None:
-        """Accept one client, run handler on each chunk read, send handler's reply.
+        """Accept one client; ``handler`` is responsible for all subsequent I/O.
 
-        handler(chunk: bytes) -> bytes | None
-            Called every time we read data from the client. Return bytes to
-            write back (one round-trip), or None to just receive.
+        The handler can have one of two signatures:
+
+        1. ``handler(chunk: bytes) -> bytes | None`` — single-roundtrip mode.
+           Serve_one reads one chunk from the client, calls the handler, writes
+           back the returned bytes (if any), and disconnects. Returns when done.
+
+        2. ``handler(server: PipeServer) -> None`` — long-lived mode. Serve_one
+           does the accept; the handler drives its own read/write loop using
+           server.read_chunk() and server.send(). It returns when it wants to
+           close the connection (or the client disconnects).
+
+        We detect the signature by inspecting the handler's parameters.
 
         timeout_s: how long to wait for a client to connect before giving up.
-
-        After this returns, the pipe instance is disconnected but the
-        handle is NOT closed — serve_loop needs it for the next iteration.
         """
         if self._handle is None:
             self.create()
-        # ConnectNamedPipe blocks until a client connects. In blocking mode
-        # (PIPE_WAIT was set), the second arg must be NULL.
         ok = kernel32.ConnectNamedPipe(self._handle, None)
         if not ok:
             err = ctypes.get_last_error()
             if err == ERROR_OPERATION_ABORTED and self._stop.is_set():
                 raise PipeError("stop requested")
-            if err != ERROR_PIPE_CONNECTED:  # ERROR_PIPE_CONNECTED means already connected
+            if err != ERROR_PIPE_CONNECTED:
                 raise PipeError(f"ConnectNamedPipe failed: Win32 error {err}")
+
         try:
-            buf = ctypes.create_string_buffer(self._buffer_size)
-            n = wintypes.DWORD(0)
-            ok = kernel32.ReadFile(self._handle, buf, self._buffer_size, ctypes.byref(n), None)
-            if not ok:
-                err = ctypes.get_last_error()
-                if err in (ERROR_BROKEN_PIPE, ERROR_NO_DATA, ERROR_OPERATION_ABORTED):
-                    return  # client disconnected
-                raise PipeError(f"ReadFile failed: Win32 error {err}")
-            if n.value == 0:
-                return  # client closed cleanly
-            chunk = bytes(buf.raw[: n.value])
-            reply = handler(chunk)
-            if reply is not None:
-                self._send(reply)
+            # Decide which signature the handler uses by inspecting its params
+            import inspect
+            try:
+                sig = inspect.signature(handler)
+                params = list(sig.parameters.values())
+                first_param_name = params[0].name if params else None
+            except (TypeError, ValueError):
+                first_param_name = None
+
+            if first_param_name in ("server", "srv", "pipe"):
+                # Long-lived mode: hand the server to the handler.
+                handler(self)
+            else:
+                # Single-roundtrip mode (handler takes a chunk arg, or no arg).
+                # Read one chunk, call handler, send reply.
+                buf = ctypes.create_string_buffer(self._buffer_size)
+                n = wintypes.DWORD(0)
+                ok = kernel32.ReadFile(self._handle, buf, self._buffer_size,
+                                       ctypes.byref(n), None)
+                if not ok:
+                    err = ctypes.get_last_error()
+                    if err in (ERROR_BROKEN_PIPE, ERROR_NO_DATA, ERROR_OPERATION_ABORTED):
+                        return
+                    raise PipeError(f"ReadFile failed: Win32 error {err}")
+                if n.value == 0:
+                    return
+                chunk = bytes(buf.raw[: n.value])
+                reply = handler(chunk)
+                if reply is not None:
+                    self._send(reply)
         finally:
             try:
                 kernel32.DisconnectNamedPipe(self._handle)
             except Exception:
                 pass
-            # Close this pipe instance so serve_loop can create a fresh one.
-            # Without this we'd leak handle on every accept iteration.
             self.close()
 
     def serve_loop(self, handler, *, timeout_s: float = 30.0) -> None:
@@ -368,9 +403,27 @@ class PipeServer:
         if not ok or written.value != len(data):
             raise PipeError("WriteFile short or failed")
 
-    def send(self, data: bytes) -> None:
-        """Server-side helper: blocking write of bytes."""
-        self._send(data)
+    def send(self, data: bytes) -> bool:
+        """Server-side helper: blocking write of bytes. Returns True on success."""
+        try:
+            self._send(data)
+            return True
+        except PipeError:
+            return False
+
+    def read_chunk(self, max_bytes: int = 64 * 1024) -> bytes:
+        """Server-side helper: blocking read of one chunk. Returns b'' on disconnect."""
+        if self._handle is None:
+            return b""
+        buf = ctypes.create_string_buffer(max_bytes)
+        n = wintypes.DWORD(0)
+        ok = kernel32.ReadFile(self._handle, buf, max_bytes, ctypes.byref(n), None)
+        if not ok:
+            err = ctypes.get_last_error()
+            if err in (ERROR_BROKEN_PIPE, ERROR_NO_DATA, ERROR_OPERATION_ABORTED):
+                return b""
+            raise PipeError(f"ReadFile failed: Win32 error {err}")
+        return bytes(buf.raw[: n.value])
 
 
 # ---- daemon-detection helper ----
