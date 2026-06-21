@@ -98,9 +98,9 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: Sequence[str]) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(list(argv))
+    args = parser.parse_args(list(argv if argv is not None else sys.argv[1:]))
 
     # Role: daemon if -d given and no subcommand
     if args.daemon and args.cmd is None:
