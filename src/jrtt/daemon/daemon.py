@@ -238,7 +238,8 @@ def run_daemon(*, pipe_name: str, dll_path: str | None, chip: str, tif: str, spe
     print(f"jrtt daemon ready (version {__version__})", flush=True)
 
     try:
-        shutdown_evt.wait()
+        while not shutdown_evt.wait(timeout=0.5):
+            pass
     except KeyboardInterrupt:
         print("\nShutting down...", flush=True)
         shutdown_evt.set()
