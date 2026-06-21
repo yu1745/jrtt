@@ -3,8 +3,8 @@ Name: jrtt
 Version: 0.0.1
 Summary: CLI + daemon wrapper around SEGGER J-Link RTT, designed for AI agents
 License: Apache-2.0
-Project-URL: Homepage, https://github.com/wangyu/jrtt
-Project-URL: Source, https://github.com/wangyu/jrtt
+Project-URL: Homepage, https://github.com/yu1745/jrtt
+Project-URL: Source, https://github.com/yu1745/jrtt
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
 License-File: LICENSE

@@ -1,13 +1,26 @@
 """jrtt skill — install the SKILL.md bundled with this repo to a known agent's skills directory.
 
-Supports Claude Code (`~/.claude/skills/<name>/` and `<cwd>/.claude/skills/<name>/`)
-and Codex (`~/.codex/skills/<name>/`). Each install drops a single `SKILL.md`
-into a folder named after the skill (default: `jrtt`).
+Targets (each drops a single `SKILL.md` into a folder named after the skill,
+default: `jrtt`):
+
+  claude-user       Claude Code (user)         ~/.claude/skills/jrtt/SKILL.md
+  claude-project    Claude Code (project)      <cwd>/.claude/skills/jrtt/SKILL.md
+  codex-user        Codex CLI (user)           ~/.codex/skills/jrtt/SKILL.md
+  agents-user       Agent Skills standard      ~/.agents/skills/jrtt/SKILL.md
+  agents-project    Agent Skills standard      <cwd>/.agents/skills/jrtt/SKILL.md
+
+`agents-user` and `agents-project` target the `~/.agents/skills/` /
+`<cwd>/.agents/skills/` family — the closest thing to a shared "Agent
+Skills" discovery path. It is the canonical home used by OpenAI Codex and
+recognized by the open standard at https://agentskills.io . Other tools
+(Claude Code, Cursor, Roo Code, …) still use their own vendor paths, so
+this covers them via the harness-specific targets above.
 
 The repo is intentionally dual-purpose: the `SKILL.md` at the repo root IS
 the skill, and the Python package is the daemon + CLI. The `skill install`
 subcommand just copies that one file (plus optional companions) into the
-target agent's skills tree so it is auto-discovered as a slash command / skill.
+target agent's skills tree so it is auto-discovered as a slash command /
+skill.
 """
 
 from __future__ import annotations
@@ -38,14 +51,32 @@ def _codex_user(root: Path) -> Path:
     # Codex CLI: ~/.codex/skills/<name>/SKILL.md
     return root / ".codex" / "skills"
 
+def _agents_user(root: Path) -> Path:
+    # Agent Skills standard (shared by Codex + others): ~/.agents/skills/<name>/SKILL.md
+    return root / ".agents" / "skills"
+
+def _agents_project(root: Path) -> Path:
+    # Agent Skills standard (project): <cwd>/.agents/skills/<name>/SKILL.md
+    return Path.cwd() / ".agents" / "skills"
+
 
 TARGETS: dict[str, tuple[str, callable]] = {
-    "claude-user":    ("Claude Code (user)",    _claude_user),
-    "claude-project": ("Claude Code (project)", _claude_project),
-    "codex-user":     ("Codex CLI (user)",      _codex_user),
+    "claude-user":    ("Claude Code (user)",           _claude_user),
+    "claude-project": ("Claude Code (project)",        _claude_project),
+    "codex-user":     ("Codex CLI (user)",             _codex_user),
+    "agents-user":    ("Agent Skills standard (user)", _agents_user),
+    "agents-project": ("Agent Skills standard (proj)", _agents_project),
 }
 
-DEFAULT_TARGETS: tuple[str, ...] = ("claude-user", "claude-project", "codex-user")
+# Default = every target whose path the user-level "Agent Skills" family
+# also covers. Skip only the project-level .agents target by default to
+# avoid littering the current repo with a .agents/ folder unless asked.
+DEFAULT_TARGETS: tuple[str, ...] = (
+    "claude-user",
+    "claude-project",
+    "codex-user",
+    "agents-user",
+)
 
 
 # --- Source resolution -------------------------------------------------------

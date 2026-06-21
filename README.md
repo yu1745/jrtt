@@ -29,19 +29,28 @@ describes how an agent should use jrtt. You can:
    ```
    $ jrtt skill install --list
    Known skill install targets:
-     claude-user       Claude Code (user)        ~/.claude/skills/jrtt/SKILL.md
-     claude-project    Claude Code (project)     <cwd>/.claude/skills/jrtt/SKILL.md
-     codex-user        Codex CLI (user)          ~/.codex/skills/jrtt/SKILL.md
+     claude-user       Claude Code (user)            ~/.claude/skills/jrtt/SKILL.md
+     claude-project    Claude Code (project)         <cwd>/.claude/skills/jrtt/SKILL.md
+     codex-user        Codex CLI (user)              ~/.codex/skills/jrtt/SKILL.md
+     agents-user       Agent Skills standard (user)  ~/.agents/skills/jrtt/SKILL.md
+     agents-project    Agent Skills standard (proj)  <cwd>/.agents/skills/jrtt/SKILL.md
 
    $ jrtt skill install
    jrtt skill: installing 'jrtt' from <repo>
      [claude-user]    installed: ~/.claude/skills/jrtt
      [claude-project] installed: ./.claude/skills/jrtt
      [codex-user]     installed: ~/.codex/skills/jrtt
+     [agents-user]    installed: ~/.agents/skills/jrtt
    ```
 
-   Flags: `--target {claude-user,claude-project,codex-user}` (repeatable),
-   `--name NAME` (default `jrtt`), `--overwrite`, `--dry-run`.
+   The `agents-*` targets hit `~/.agents/skills/` and `<cwd>/.agents/skills/`,
+   the canonical path used by the [Agent Skills](https://agentskills.io) open
+   standard (adopted by OpenAI Codex and others). Vendor-specific paths
+   (`.claude/skills/`, `.codex/skills/`) are kept as separate targets because
+   most harnesses do **not** read `.agents/skills/`.
+
+   Flags: `--target {claude-user,claude-project,codex-user,agents-user,agents-project}`
+   (repeatable), `--name NAME` (default `jrtt`), `--overwrite`, `--dry-run`.
    `jrtt skill uninstall` reverses it.
 
 The repo is therefore **both** a Python package (the daemon + CLI) **and**
