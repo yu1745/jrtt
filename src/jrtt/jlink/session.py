@@ -74,7 +74,14 @@ class JLinkSession:
         tif:     SWD or JTAG. SWD is the typical modern default.
         speed_khz: JTAG/SWD clock in kHz. 0 = adaptive (slower but robust).
         """
-        self._lib = self._pylink_Library(dllpath=self._dll_path) if self._dll_path else self._pylink_Library()
+        try:
+            self._lib = self._pylink_Library(dllpath=self._dll_path) if self._dll_path else self._pylink_Library()
+        except (TypeError, FileNotFoundError):
+            raise RuntimeError(
+                "JLink_x64.dll not found. Install SEGGER J-Link software from "
+                "https://www.segger.com/downloads/jlink/ , or point to a custom "
+                "path via --dll / $JLINK_PATH."
+            ) from None
         self._jlink = self._pylink_JLink(lib=self._lib)
         # pylink.open() handles SelectUSB + OpenEx + JLock internally
         if sn is not None:

@@ -17,8 +17,8 @@ dependencies = [
 dev = ["pytest>=8", "ruff", "mypy"]
 
 [project.urls]
-Homepage = "https://github.com/wangyu/jrtt"
-Source = "https://github.com/wangyu/jrtt"
+Homepage = "https://github.com/yu1745/jrtt"
+Source = "https://github.com/yu1745/jrtt"
 
 [project.scripts]
 jrtt = "jrtt.cli:main"

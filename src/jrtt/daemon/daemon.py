@@ -151,7 +151,10 @@ def run_daemon(*, pipe_name: str, dll_path: str | None, chip: str, tif: str, spe
     """Entry point for `jrtt -d`."""
     lock_exit = _acquire_daemon_lock()
     if lock_exit is not None:
-        print("jrtt: another daemon is already running", file=sys.stderr)
+        print(
+            "jrtt: another daemon is already running. Use `jrtt stop` to shut it down.",
+            file=sys.stderr,
+        )
         return lock_exit
     tif_enum = _TIF_MAP.get(tif.lower())
     if tif_enum is None:
