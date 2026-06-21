@@ -229,6 +229,20 @@ class PipeClient:
             raise PipeError(f"ReadFile failed: Win32 error {err}")
         return bytes(buf.raw[: n.value])
 
+    def read_chunk(self, max_bytes: int = 64 * 1024) -> bytes:
+        """Server-side helper: blocking read of one chunk. Returns b'' on disconnect."""
+        if self._handle is None:
+            return b""
+        buf = ctypes.create_string_buffer(max_bytes)
+        n = wintypes.DWORD(0)
+        ok = kernel32.ReadFile(self._handle, buf, max_bytes, ctypes.byref(n), None)
+        if not ok:
+            err = ctypes.get_last_error()
+            if err in (ERROR_BROKEN_PIPE, ERROR_NO_DATA, ERROR_OPERATION_ABORTED):
+                return b""
+            raise PipeError(f"ReadFile failed: Win32 error {err}")
+        return bytes(buf.raw[: n.value])
+
 
 # ---- server ----
 
@@ -353,6 +367,10 @@ class PipeServer:
         ok = kernel32.WriteFile(self._handle, data, len(data), ctypes.byref(written), None)
         if not ok or written.value != len(data):
             raise PipeError("WriteFile short or failed")
+
+    def send(self, data: bytes) -> None:
+        """Server-side helper: blocking write of bytes."""
+        self._send(data)
 
 
 # ---- daemon-detection helper ----

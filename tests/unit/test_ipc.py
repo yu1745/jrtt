@@ -65,6 +65,7 @@ def test_server_client_roundtrip() -> None:
 
 
 def test_server_handles_multiple_frames_in_one_read() -> None:
+    """Server can split a chunk with multiple newlines into individual lines."""
     name = _unique_pipe_name()
     server = PipeServer(name)
     received_lines: list[str] = []
@@ -72,19 +73,21 @@ def test_server_handles_multiple_frames_in_one_read() -> None:
     def handle(chunk: bytes) -> bytes:
         for line in chunk.splitlines(keepends=True):
             received_lines.append(line.decode().rstrip("\n"))
-        return b"ack\n"
+        # No reply; daemon-style streaming connection — just consume
+        return None
 
     server_thread = threading.Thread(
         target=lambda: server.serve_one(handle, timeout_s=2.0), daemon=True
     )
     server_thread.start()
+    time.sleep(0.2)
 
     payload = b"line1\nline2\nline3\n"
     with PipeClient(name, timeout_ms=2000) as client:
         client.send(payload)
-        ack = client.recv(timeout_s=1.0)
+        # Give server time to read; then close so server's ReadFile unblocks.
+        time.sleep(0.3)
     server_thread.join(timeout=2.0)
-    assert ack == b"ack\n"
     assert received_lines == ["line1", "line2", "line3"]
 
 
