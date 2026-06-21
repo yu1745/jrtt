@@ -68,14 +68,13 @@ TARGETS: dict[str, tuple[str, callable]] = {
     "agents-project": ("Agent Skills standard (proj)", _agents_project),
 }
 
-# Default = every target whose path the user-level "Agent Skills" family
-# also covers. Skip only the project-level .agents target by default to
-# avoid littering the current repo with a .agents/ folder unless asked.
+# Default: only the "Agent Skills" standard path (`.agents/skills/`).
+# No vendor preference — `jrtt skill install` with no args installs to
+# the shared, harness-agnostic location. Vendor paths (`.claude/skills/`,
+# `.codex/skills/`) are opt-in via `--target`.
 DEFAULT_TARGETS: tuple[str, ...] = (
-    "claude-user",
-    "claude-project",
-    "codex-user",
     "agents-user",
+    "agents-project",
 )
 
 

@@ -12,7 +12,7 @@ jrtt dump --last 10               # snapshot recent lines
 jrtt status                       # show daemon/JLink state
 jrtt ping                         # health probe
 jrtt stop                         # shutdown daemon
-jrtt skill install                # install SKILL.md to Claude Code / Codex
+jrtt skill install                # install SKILL.md to .agents/skills/ (standard)
 ```
 
 ## This repo is also a skill repo
@@ -24,7 +24,20 @@ describes how an agent should use jrtt. You can:
 1. **Use it in place.** Open this folder as the agent's working dir — the
    `SKILL.md` is discovered.
 2. **Install it.** `jrtt skill install` copies `SKILL.md` (and `LICENSE`) to
-   the agent's known skills directories:
+   the agent's known skills directories.
+
+   With **no arguments**, the default is the vendor-neutral
+   [Agent Skills](https://agentskills.io) standard path (`.agents/skills/`)
+   — no Claude/Codex bias:
+
+   ```
+   $ jrtt skill install
+   jrtt skill: installing 'jrtt' from <repo>
+     [agents-user]    installed: ~/.agents/skills/jrtt
+     [agents-project] installed: <cwd>/.agents/skills/jrtt
+   ```
+
+   To target a specific vendor, pass `--target` (repeatable):
 
    ```
    $ jrtt skill install --list
@@ -35,12 +48,7 @@ describes how an agent should use jrtt. You can:
      agents-user       Agent Skills standard (user)  ~/.agents/skills/jrtt/SKILL.md
      agents-project    Agent Skills standard (proj)  <cwd>/.agents/skills/jrtt/SKILL.md
 
-   $ jrtt skill install
-   jrtt skill: installing 'jrtt' from <repo>
-     [claude-user]    installed: ~/.claude/skills/jrtt
-     [claude-project] installed: ./.claude/skills/jrtt
-     [codex-user]     installed: ~/.codex/skills/jrtt
-     [agents-user]    installed: ~/.agents/skills/jrtt
+   $ jrtt skill install --target claude-user --target codex-user
    ```
 
    The `agents-*` targets hit `~/.agents/skills/` and `<cwd>/.agents/skills/`,
