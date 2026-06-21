@@ -2,9 +2,98 @@ Metadata-Version: 2.4
 Name: jrtt
 Version: 0.0.1
 Summary: CLI + daemon wrapper around SEGGER J-Link RTT, designed for AI agents
+License: Apache-2.0
+Project-URL: Homepage, https://github.com/wangyu/jrtt
+Project-URL: Source, https://github.com/wangyu/jrtt
 Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
 Requires-Dist: pylink-square<3,>=1.0
 Provides-Extra: dev
 Requires-Dist: pytest>=8; extra == "dev"
 Requires-Dist: ruff; extra == "dev"
 Requires-Dist: mypy; extra == "dev"
+Dynamic: license-file
+
+# jrtt — J-Link RTT Tail
+
+**Agent-first CLI + daemon for SEGGER J-Link RTT.**
+
+Replaces `JLinkRTTViewer.exe` with a CLI tool designed for AI agents: fast,
+non-blocking, pipe-friendly, structured output.
+
+```
+jrtt -d                           # start daemon (background)
+jrtt tail                         # stream RTT lines (GNU tail-compatible)
+jrtt dump --last 10               # snapshot recent lines
+jrtt status                       # show daemon/JLink state
+jrtt ping                         # health probe
+jrtt stop                         # shutdown daemon
+```
+
+## Quick start
+
+```bash
+pip install pylink-square>=1.0
+python -m jrtt -d --chip N32G430C8
+python -m jrtt tail -f
+```
+
+## Architecture
+
+```
+jrtt tail / dump / ping / stop
+          ↕ Named Pipe (NDJSON)
+jrtt -d ─── JLinkSession (pylink-square)
+           ─── RttDaemonReader (poll 5ms)
+           ─── RingBuffer (4096 lines)
+           ─── Broadcaster (per-subscriber fan-out)
+```
+
+- **Single binary**. `jrtt -d` → daemon role; `jrtt <cmd>` → client role.
+- **Auto-spawn**. If no daemon is running, CLI spawns one as a detached child.
+- **Single J-Link probe** per daemon. One daemon can serve many CLI clients.
+- **Streaming NDJSON** over Windows Named Pipe (`\\.\pipe\jrtt`).
+
+## Tail command
+
+GNU `tail`-style flags plus jrtt extensions:
+
+```bash
+jrtt tail                     # stream live
+jrtt tail -n 100              # replay last 100 lines, then live
+jrtt tail --regex '\[ERR\]'   # filter by regex
+jrtt tail --channel 1         # different RTT up-buffer
+jrtt tail --since 30s         # skip lines older than 30s
+jrtt tail --max-lines 10      # exit after 10 lines
+jrtt tail --json              # NDJSON output (for agents)
+```
+
+## Dependencies
+
+- `pylink-square >= 1.0, < 3` (Apache 2.0)
+- Windows (Named Pipes; no Linux/macOS support yet)
+- SEGGER J-Link driver (`JLink_x64.dll`, auto-detected in standard locations)
+
+## Example output
+
+```
+$ jrtt tail -f
+22:37:27.701 foc[171818999] cnt=171819007 us=37 mode=0 rpm=0 ...
+22:37:27.792 foc[171819999] cnt=171820007 us=37 mode=0 rpm=0 ...
+22:37:27.893 foc[171820999] cnt=171821007 us=37 mode=0 rpm=0 ...
+
+$ jrtt status
+daemon:    up (pid 55440, uptime 14s)
+jlink:     connected (SN 123456, SWD, 4000 kHz)
+rtt:       active (ch0=1KB, ch1=1KB)
+subscribers: 1
+ring buffer: 59/4096 lines
+```
+
+## Known limitations (v1)
+
+- **Read-only.** Down-buffer writes not supported yet.
+- **Single channel.** RTT up-buffer 0 by default (`--channel N` support exists).
+- **Windows-only.** Named Pipes are Windows-specific (Unix socket support TBD).
+- **No config file.** CLI args only for now.

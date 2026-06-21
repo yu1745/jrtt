@@ -25,12 +25,13 @@ import threading
 import time
 from ctypes import wintypes
 
-if sys.platform != "win32":
-    raise ImportError("jrtt.ipc is Windows-only (Named Pipes)")
 
 # ---- Win32 bindings ----
 
-kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+if sys.platform == "win32":
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+else:
+    kernel32 = None
 
 GENERIC_READ = 0x80000000
 GENERIC_WRITE = 0x40000000

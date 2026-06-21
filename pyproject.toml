@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "jrtt"
 version = "0.0.1"
 description = "CLI + daemon wrapper around SEGGER J-Link RTT, designed for AI agents"
+readme = "README.md"
+license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 dependencies = [
     "pylink-square>=1.0,<3",
@@ -13,6 +15,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff", "mypy"]
+
+[project.urls]
+Homepage = "https://github.com/wangyu/jrtt"
+Source = "https://github.com/wangyu/jrtt"
+
+[project.scripts]
+jrtt = "jrtt.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -125,8 +125,34 @@ def _do_dump(ring: RingBuffer, args: dict) -> dict:
     }
 
 
+def _acquire_daemon_lock() -> int | None:
+    """Try to acquire a named Win32 mutex. Returns None on success (first daemon),
+    or exit code 5 if another daemon is already running."""
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel32.CreateMutexW.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    MUTEX_NAME = "jrtt_daemon"
+    h = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    if h is None or h == 0:
+        return None  # can't check, let it proceed
+    err = ctypes.get_last_error()
+    ERROR_ALREADY_EXISTS = 183
+    if err == ERROR_ALREADY_EXISTS:
+        kernel32.CloseHandle(h)
+        return 5
+    return None  # first instance, keep the handle alive for the daemon's lifetime
+
 def run_daemon(*, pipe_name: str, dll_path: str | None, chip: str, tif: str, speed_khz: int) -> int:
     """Entry point for `jrtt -d`."""
+    lock_exit = _acquire_daemon_lock()
+    if lock_exit is not None:
+        print("jrtt: another daemon is already running", file=sys.stderr)
+        return lock_exit
     tif_enum = _TIF_MAP.get(tif.lower())
     if tif_enum is None:
         print(f"jrtt: bad --tif {tif}", file=sys.stderr)

@@ -18,6 +18,10 @@ import argparse
 import sys
 from typing import Sequence
 
+if sys.platform != "win32":
+    print("jrtt: Windows only (uses Named Pipes); aborting", file=sys.stderr)
+    sys.exit(1)
+
 from jrtt import __version__
 from jrtt.cli_cmds import tail as cmd_tail
 from jrtt.cli_cmds import dump as cmd_dump
