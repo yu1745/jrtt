@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: jrtt
+Version: 0.0.1
+Summary: CLI + daemon wrapper around SEGGER J-Link RTT, designed for AI agents
+Requires-Python: >=3.10
+Requires-Dist: pylink-square<3,>=1.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
