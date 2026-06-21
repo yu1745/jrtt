@@ -63,17 +63,21 @@ so step 1 is optional for one-off use.
 
 ### 2. Tail live output
 
+GNU `tail` semantics — by default `tail` prints and exits, add `-f` to follow:
+
 ```bash
-jrtt tail                       # stream live
-jrtt tail -n 100                # replay last 100 lines, then live
+jrtt tail                       # print last 10 lines from ring buffer, exit (GNU default)
+jrtt tail -f                    # print last 10, then follow forever
+jrtt tail -n 100                # print last 100, exit
+jrtt tail -n 100 -f             # print last 100, then follow forever
 jrtt tail --regex '\[ERR\]'     # filter by Python regex
 jrtt tail --channel 1           # different RTT up-buffer
-jrtt tail --since 30s           # skip lines older than 30s
-jrtt tail --max-lines 10        # exit after 10 lines
+jrtt tail --since 30s           # only show lines from the last 30s
+jrtt tail -f --max-lines 10     # follow but exit after 10 lines emitted
 jrtt tail --json                # NDJSON output (one JSON object per line)
 ```
 
-`tail` exits cleanly on **Ctrl+C** (sends `SIGINT`, drains pipe, returns 0).
+`tail` (with `-f`) exits cleanly on **Ctrl+C** (sends `SIGINT`, drains pipe, returns 0).
 
 ### 3. Snapshot the ring buffer
 
@@ -160,8 +164,8 @@ When the user says "watch the logs" / "tail the output" / "what's the firmware p
 
 1. Confirm the target chip and probe are connected (ask if unsure).
 2. Start the daemon if not running: `jrtt -d --chip <NAME>` (or rely on auto-spawn).
-3. Stream with `jrtt tail --json` so the output is parseable.
-4. To stop streaming, send `Ctrl+C` / `SIGINT` — `tail` returns 0 cleanly.
+3. Stream with `jrtt tail -f --json` so the output is parseable and follows live.
+4. To stop streaming, send `Ctrl+C` / `SIGINT` — `tail -f` returns 0 cleanly.
 
 When the user says "show me the last 50 lines" / "what just happened":
 

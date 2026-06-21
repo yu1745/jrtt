@@ -329,8 +329,17 @@ def _serve_tail(
     ring: RingBuffer,
     shutdown_evt: threading.Event,
 ) -> None:
-    """Register subscriber, ack client, then stream events until disconnect."""
+    """Stream ring-buffer events to a tail client.
+
+    Two modes (GNU-tail compatible):
+      follow=False  — send the requested slice of the ring buffer, then
+                      return. Client sees pipe close and exits. No
+                      subscriber registration, no broadcaster involved.
+      follow=True   — register as a subscriber; the broadcaster feeds
+                      replay + live events until the client disconnects.
+    """
     args = req.args or {}
+    follow = bool(args.get("follow", False))
     channel = int(args.get("channel", 0))
     regex_pat = args.get("regex")
     replay_last_n = int(args.get("replay_last_n", 0))
@@ -348,6 +357,35 @@ def _serve_tail(
             server.send(encode_frame(Res(id=req.id, ok=False, code="E_BAD_REGEX", msg=str(e))))
             return
 
+    # Non-following path: snapshot, filter, send, return. No broadcaster.
+    if not follow:
+        snap = ring.snapshot()
+        if since_seconds > 0:
+            cutoff = time.time() - since_seconds
+            snap = [e for e in snap if e.ts >= cutoff]
+        if channel:
+            snap = [e for e in snap if e.channel == channel]
+        if compiled_re is not None:
+            snap = [e for e in snap if compiled_re.search(e.data)]
+        # `-n N` is replay_last_n; `--max-lines M` in non-follow mode is
+        # also a cap on the slice. Take the larger of the two (whichever
+        # the user supplied) and tail-end.
+        cap = max(replay_last_n, int(max_lines) if max_lines is not None else 0)
+        if cap > 0:
+            snap = snap[-cap:]
+        if not server.send(encode_frame(Res(id=req.id, ok=True))):
+            return
+        for e in snap:
+            evt = Evt(
+                id=req.id,
+                name="rtt.line",
+                data={"ts": e.ts, "channel": e.channel, "data": _decode_for_wire(e.data)},
+            )
+            if not server.send(encode_frame(evt)):
+                return
+        return
+
+    # Following path: subscriber + broadcaster.
     sub = Subscriber(
         id=req.id,
         channel=channel,

@@ -68,8 +68,9 @@ a skill repo (the `SKILL.md`). The `skill` subcommand is the bridge.
 
 ```bash
 pip install pylink-square>=1.0
-python -m jrtt -d --chip N32G430C8
-python -m jrtt tail -f
+python -m jrtt -d --chip N32G430C8     # start daemon
+python -m jrtt tail                     # print last 10 lines, exit (GNU default)
+python -m jrtt tail -f                  # follow forever
 ```
 
 ## Architecture
@@ -90,15 +91,17 @@ jrtt -d ─── JLinkSession (pylink-square)
 
 ## Tail command
 
-GNU `tail`-style flags plus jrtt extensions:
+GNU `tail` semantics — `tail` prints and exits by default, add `-f` to follow:
 
 ```bash
-jrtt tail                     # stream live
-jrtt tail -n 100              # replay last 100 lines, then live
+jrtt tail                     # print last 10 lines from ring buffer, exit (GNU default)
+jrtt tail -f                  # print last 10, then follow forever
+jrtt tail -n 100              # print last 100, exit
+jrtt tail -n 100 -f           # print last 100, then follow forever
 jrtt tail --regex '\[ERR\]'   # filter by regex
 jrtt tail --channel 1         # different RTT up-buffer
-jrtt tail --since 30s         # skip lines older than 30s
-jrtt tail --max-lines 10      # exit after 10 lines
+jrtt tail --since 30s         # only show lines from the last 30s
+jrtt tail -f --max-lines 10   # follow but exit after 10 lines emitted
 jrtt tail --json              # NDJSON output (for agents)
 ```
 
@@ -111,10 +114,13 @@ jrtt tail --json              # NDJSON output (for agents)
 ## Example output
 
 ```
-$ jrtt tail -f
+$ jrtt tail
 22:37:27.701 foc[171818999] cnt=171819007 us=37 mode=0 rpm=0 ...
 22:37:27.792 foc[171819999] cnt=171820007 us=37 mode=0 rpm=0 ...
 22:37:27.893 foc[171820999] cnt=171821007 us=37 mode=0 rpm=0 ...
+
+$ jrtt tail -f
+... (follows forever; Ctrl+C to exit)
 
 $ jrtt status
 daemon:    up (pid 55440, uptime 14s)

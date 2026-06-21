@@ -39,8 +39,11 @@ def run(args: argparse.Namespace) -> int:
     since_dur = getattr(args, "since", None)
     max_lines = getattr(args, "max_lines", None)
     json_out = getattr(args, "json", False)
-    follow = getattr(args, "follow", True)  # default on for tail
-    replay_n = getattr(args, "lines", None) or 0  # -n N → replay_last_n
+    follow = getattr(args, "follow", False)  # default: print and exit (GNU tail)
+    replay_n = getattr(args, "lines", None)
+    if replay_n is None:
+        replay_n = 10  # GNU-tail default: last 10 lines
+    replay_n = int(replay_n)  # -n N → replay_last_n (0 = no replay)
 
     req_args: dict = {"channel": channel or 0, "follow": follow, "replay_last_n": int(replay_n or 0)}
     if regex_pat:

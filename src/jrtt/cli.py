@@ -77,13 +77,14 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=False)
 
     tail_p = sub.add_parser("tail", help="Stream RTT lines (GNU tail-compatible)")
-    tail_p.add_argument("-n", "--lines", type=int, default=0,
-                        help="Replay last N lines on connect (0 = live only)")
-    tail_p.add_argument("-f", "--follow", action="store_true", default=True)
+    tail_p.add_argument("-n", "--lines", type=int, default=10,
+                        help="Print last N lines then exit (0 = no replay, live only with -f). Default: 10 (GNU tail).")
+    tail_p.add_argument("-f", "--follow", action="store_true", default=False,
+                        help="Follow forever after replay (default: print and exit, like GNU tail)")
     tail_p.add_argument("-c", "--channel", type=int, default=0, help="RTT up-buffer index (default: 0)")
     tail_p.add_argument("--regex", type=str, default=None, help="Filter lines matching regex (Python bytes pattern)")
     tail_p.add_argument("--since", type=str, default=None, help="Only show lines newer than DUR (e.g. 10s, 2m)")
-    tail_p.add_argument("--max-lines", type=int, default=None, help="Exit after N lines")
+    tail_p.add_argument("--max-lines", type=int, default=None, help="With -f: exit after N lines emitted")
     tail_p.add_argument("--json", action="store_true", help="NDJSON output for agent consumption")
 
     dump_p = sub.add_parser("dump", help="Snapshot ring buffer")
